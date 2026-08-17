@@ -1,0 +1,602 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AnalystView",
+  "description": "Structured output contract emitted by an analyst agent and consumed by the Risk Manager.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "agent",
+    "ticker",
+    "as_of",
+    "stance",
+    "conviction",
+    "confidence"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "agent": {
+      "enum": [
+        "fundamental-analyst",
+        "technical-analyst",
+        "sentiment-analyst",
+        "macro-analyst",
+        "insider-analyst",
+        "quant-analyst",
+        "options-analyst",
+        "quality-analyst",
+        "catalyst-analyst",
+        "credit-analyst",
+        "liquidity-analyst",
+        "altdata-analyst",
+        "fx-macro-analyst",
+        "news-analyst"
+      ]
+    },
+    "ticker": {
+      "type": "string"
+    },
+    "as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "stance": {
+      "enum": [
+        "long",
+        "short",
+        "flat"
+      ]
+    },
+    "conviction": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "horizon_months": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "fair_value": {
+      "type": "object",
+      "description": "Required for fundamental-analyst.",
+      "properties": {
+        "low": {
+          "type": "number"
+        },
+        "base": {
+          "type": "number"
+        },
+        "high": {
+          "type": "number"
+        },
+        "current": {
+          "type": "number"
+        }
+      }
+    },
+    "levels": {
+      "type": "object",
+      "description": "Required for technical-analyst.",
+      "properties": {
+        "support": {
+          "type": "number"
+        },
+        "resistance": {
+          "type": "number"
+        },
+        "stop": {
+          "type": "number"
+        }
+      }
+    },
+    "sentiment": {
+      "type": "object",
+      "description": "Required for sentiment-analyst.",
+      "properties": {
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "mention_volume": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "trend": {
+          "enum": [
+            "rising",
+            "flat",
+            "falling"
+          ]
+        },
+        "top_sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "macro": {
+      "type": "object",
+      "description": "Required for macro-analyst.",
+      "properties": {
+        "regime": {
+          "enum": [
+            "risk_on",
+            "neutral",
+            "risk_off"
+          ]
+        },
+        "rates_bias": {
+          "enum": [
+            "hiking",
+            "hold",
+            "cutting"
+          ]
+        },
+        "usd_trend": {
+          "enum": [
+            "up",
+            "flat",
+            "down"
+          ]
+        },
+        "indicators": {
+          "type": "object",
+          "description": "Named macro readings the analyst tracks (FRED/St. Louis Fed series, BofA Bull & Bear, credit spreads, etc.).",
+          "additionalProperties": true
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "insider": {
+      "type": "object",
+      "description": "Required for insider-analyst. Corporate insiders (Form 4/3/5, 13D/G, 13F) plus congressional (STOCK Act) trades.",
+      "properties": {
+        "net_activity": {
+          "enum": [
+            "buying",
+            "selling",
+            "neutral"
+          ]
+        },
+        "cluster_buying": {
+          "type": "boolean"
+        },
+        "earnings_revision": {
+          "enum": [
+            "up",
+            "flat",
+            "down"
+          ]
+        },
+        "political_activity": {
+          "type": "object",
+          "description": "Congressional (STOCK Act Periodic Transaction Reports) trades. Note: the President files an annual OGE 278e, not per-trade PTRs, so this tracks Congress + notable filers.",
+          "properties": {
+            "congress_net": {
+              "enum": [
+                "buying",
+                "selling",
+                "neutral"
+              ]
+            },
+            "committee_conflict": {
+              "type": "boolean",
+              "description": "Filer sits on a committee with jurisdiction over the name/sector (higher-signal)."
+            },
+            "notable_filers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "unusual_flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "factors": {
+      "type": "object",
+      "description": "Required for quant-analyst. Factor z-scores; score = composite tilt.",
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "momentum": {
+          "type": "number"
+        },
+        "quality": {
+          "type": "number"
+        },
+        "low_vol": {
+          "type": "number"
+        },
+        "size": {
+          "type": "number"
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "options": {
+      "type": "object",
+      "description": "Required for options-analyst. score = positioning tilt. iv_rank and term_structure feed the Options Strategist.",
+      "properties": {
+        "iv": {
+          "type": "number"
+        },
+        "skew": {
+          "type": "number"
+        },
+        "put_call": {
+          "type": "number"
+        },
+        "unusual": {
+          "type": "string"
+        },
+        "iv_rank": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "IV percentile vs. its own 1y range (0-100). High => sell premium."
+        },
+        "term_structure": {
+          "enum": [
+            "contango",
+            "flat",
+            "backwardation"
+          ],
+          "description": "Front vs. back month IV. Backwardation (front rich) favors calendars/diagonals."
+        },
+        "call_convexity": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "description": "Richness/convexity of the upside call skew. High = crowded/overpriced calls -> a short-premium (fade the calls) candidate."
+        },
+        "gamma": {
+          "type": "object",
+          "description": "Dealer gamma landscape (esp. SPX/NDX). Feeds the Strategist's butterfly placement.",
+          "properties": {
+            "net_gex_bn": {
+              "type": "number",
+              "description": "Net dealer gamma exposure ($bn). Positive = dealers long gamma (mean-reverting, pinning); negative = short gamma (trend-amplifying)."
+            },
+            "gamma_regime": {
+              "enum": [
+                "positive",
+                "negative"
+              ]
+            },
+            "gamma_flip": {
+              "type": "number",
+              "description": "Zero-gamma level: price below it flips dealers short gamma (unstable)."
+            },
+            "call_wall": {
+              "type": "number",
+              "description": "Highest-gamma call strike above spot \u2014 a resistance / pin magnet into expiry."
+            },
+            "put_wall": {
+              "type": "number",
+              "description": "Highest-gamma put strike below spot \u2014 a support magnet."
+            },
+            "gamma_pin": {
+              "type": "number",
+              "description": "The strike price is most likely to gravitate toward at expiry (peak dealer gamma)."
+            },
+            "computed_at": {
+              "type": "string",
+              "description": "ISO timestamp the gamma landscape was computed. For 0DTE the Strategist REQUIRES this to be recent (walls rebuild on same-day flow); a stale read is not traded."
+            },
+            "wall_confidence": {
+              "type": "string",
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "description": "Optional: reliability of the wall/pin. Highest as an intraday pin at 0DTE; decays as the read ages."
+            }
+          }
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "tenor": {
+          "type": "string",
+          "enum": [
+            "0DTE",
+            "weekly",
+            "monthly",
+            "leaps",
+            "mixed"
+          ],
+          "description": "Expiry focus this options read is about. 0DTE (SPX/NDX) drives the same-day gamma trade in the Strategist."
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "description": "Required for quality-analyst. score = earnings-quality tilt (can veto if very negative).",
+      "properties": {
+        "accruals_ratio": {
+          "type": "number"
+        },
+        "red_flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "restatement_risk": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "catalyst": {
+      "type": "object",
+      "description": "Required for catalyst-analyst. score = expected catalyst direction.",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "expected_move_pct": {
+          "type": "number"
+        },
+        "ipo": {
+          "type": "object",
+          "description": "Post-IPO lock-up cycle context (recent new issues only).",
+          "properties": {
+            "is_recent_ipo": {
+              "type": "boolean"
+            },
+            "ipo_date": {
+              "type": "string"
+            },
+            "lockup_expiry_date": {
+              "type": "string"
+            },
+            "phase": {
+              "enum": [
+                "pre_lockup",
+                "lockup_downdraft",
+                "bottoming_window",
+                "post"
+              ]
+            },
+            "quality_gate": {
+              "enum": [
+                "pass",
+                "fail",
+                "unknown"
+              ]
+            }
+          }
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "credit": {
+      "type": "object",
+      "description": "Required for credit-analyst (overlay). score = credit tilt (negative caps/vetoes).",
+      "properties": {
+        "cds_bps": {
+          "type": "number"
+        },
+        "leverage": {
+          "type": "number"
+        },
+        "default_prob": {
+          "type": "number"
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "liquidity": {
+      "type": "object",
+      "description": "Required for liquidity-analyst (overlay). score = tradeability tilt.",
+      "properties": {
+        "adv_usd_m": {
+          "type": "number"
+        },
+        "days_to_exit": {
+          "type": "number"
+        },
+        "crowding": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "short_interest_pct": {
+          "type": "number"
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "news": {
+      "type": "object",
+      "description": "Required for news-analyst (voter). Curated factual news, not crowd mood. score = tone tilt.",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "materiality": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "top_stories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "altdata": {
+      "type": "object",
+      "description": "Required for altdata-analyst. score = demand nowcast tilt.",
+      "properties": {
+        "card_spend_yoy": {
+          "type": "number"
+        },
+        "web_traffic_yoy": {
+          "type": "number"
+        },
+        "channel": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "fx": {
+      "type": "object",
+      "description": "Required for fx-macro-analyst (overlay). Currency/CB-intervention risk. score = risk tilt (negative = FX/carry shock risk -> trim/veto).",
+      "properties": {
+        "pair": {
+          "type": "string"
+        },
+        "carry_unwind_risk": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "cb_intervention": {
+          "enum": [
+            "none",
+            "verbal",
+            "actual"
+          ]
+        },
+        "key_signal": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "signal_quality": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "description": "Optional. How reliable this directional call is \u2014 used for put-writing suitability. Precision voters (fundamental, technical, quant) should set it."
+    },
+    "downside_floor": {
+      "type": "number",
+      "description": "Optional. Price below which this analyst's bull thesis breaks. Used to place a short-put strike safely below all floors (assignment-risk control)."
+    },
+    "upside_ceiling": {
+      "type": "number",
+      "description": "Optional (SHORT candidates). Price above which this analyst's bear thesis breaks. Mirror of downside_floor; used to place a short-call/credit-spread strike safely above all ceilings."
+    },
+    "profit_target": {
+      "type": "object",
+      "description": "Optional. Where the analyst expects the stock to trade. price = target; method explains it (e.g. average multiple x forward EPS, or own research).",
+      "properties": {
+        "price": {
+          "type": "number"
+        },
+        "method": {
+          "type": "string"
+        },
+        "horizon_months": {
+          "type": "integer"
+        }
+      }
+    },
+    "rationale": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "confidence": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,108 @@
+# Quantum28 — data source inventory. Every feed the framework consumes: provider, endpoint,
+# env key, frequency, and which agent/module reads it. Personal-use data only.
+
+markets:
+  option_chains_greeks_oi:
+    provider: [tastytrade, ibkr]          # Tasty primary (streaming greeks via dxfeed); IB fuller chain
+    env: [TASTY_CLIENT_SECRET, TASTY_REFRESH_TOKEN, IB_ENABLED, IB_HOST, IB_PORT, IB_CLIENT_ID]
+    frequency: real-time (0DTE / GEX intraday, esp. midday) + EOD snapshot (decay signals)
+    consumers: [datafeed.py, gex_algo.py, strategist.py, decay_signals.py, orchestrator.put_write]
+    note: real-time greeks need your OPRA market-data entitlement (non-professional).
+  underlying_quotes:
+    provider: [tastytrade, ibkr]
+    frequency: real-time (live) / EOD (signals)
+    consumers: [all voters, cio.py, decay_signals.py]
+  vix_term_structure:
+    provider: [ibkr, cboe]                # IB VIX futures (real-time) / Cboe (free, delayed)
+    endpoint: https://www.cboe.com/tradable-products/vix/term-structure/
+    frequency: intraday (vol 0DTE) / EOD (VX1/VX2, VX1/VX6)
+    consumers: [decay_signals.py (vol), options-analyst]
+  natgas_futures_curve:
+    provider: [ibkr]                      # NG1/NG2 front/second
+    frequency: EOD
+    consumers: [decay_signals.py (natgas)]
+  crude_futures_curve:
+    provider: [ibkr]                      # CL1/CL2
+    frequency: EOD
+    consumers: [decay_signals.py (crude)]
+  single_stock_futures:
+    provider: [ibkr]                      # CME SSF — NOT LIVE until ~Sept 2026 (SSF_GO_LIVE)
+    frequency: intraday (basis) / EOD scan
+    consumers: [basis.py]
+    note: monitor-only until go-live; basis.py emits no order tickets before SSF_GO_LIVE.
+  short_interest_borrow:
+    provider: [finra, ibkr]               # FINRA short interest (bi-monthly) + IB borrow rate (real-time)
+    frequency: SI bi-monthly / borrow daily
+    consumers: [decay_signals.py (single/lev-index)]
+
+macro:                                    # all FREE
+  fred:
+    provider: fred
+    env: FRED_API_KEY                     # free same-day key; header Authorization: Bearer <key>
+    endpoint: https://api.stlouisfed.org/fred/series/observations
+    series:
+      STLFSI4: weekly        # St. Louis Fed Financial Stress Index
+      NFCI: weekly           # Chicago Fed conditions
+      ANFCI: weekly
+      KCFSI: monthly         # Kansas City Fed stress
+      BAMLH0A0HYM2: daily    # HY OAS (credit)
+      T10Y2Y: daily          # yield curve 10y-2y
+      T10Y3M: daily          # yield curve 10y-3m
+      RECPROUSM156N: monthly # recession probability
+      SAHMREALTIME: monthly  # Sahm rule
+      WALCL: weekly          # Fed balance sheet (net liquidity)
+      WTREGEN: daily         # Treasury General Account
+      RRPONTSYD: daily       # overnight reverse repo
+    consumers: [macro-analyst, credit-analyst, liquidity-analyst]
+  eia_natgas_storage:
+    provider: eia
+    env: EIA_API_KEY                      # free key
+    endpoint: https://api.eia.gov/v2/natural-gas/stor/wkly/data/
+    frequency: weekly (Thursday 10:30 ET)
+    consumers: [decay_signals.py (natgas storage)]
+  eia_crude_inventory:
+    provider: eia
+    env: EIA_API_KEY
+    frequency: weekly (Wednesday 10:30 ET)
+    consumers: [decay_signals.py (crude inventory)]
+  weather_hdd_cdd:
+    provider: noaa_cpc                    # NOAA Climate Prediction Center 6-15 day HDD/CDD
+    env: NOAA_TOKEN                       # free token (ncdc/CDO) if using the API
+    frequency: daily (6-15 day forecast window)
+    consumers: [decay_signals.py (natgas weather)]
+  sentiment_indices:
+    provider: [aaii, bofa]                # AAII weekly (free page); BofA Bull&Bear (paywalled)
+    frequency: weekly
+    consumers: [macro-analyst]
+    note: no free API — AAII scrape/manual; BofA approximate or skip.
+
+fundamentals_events_news:
+  sec_edgar:
+    provider: sec_edgar                   # free — filings + Form 4 insider
+    endpoint: https://data.sec.gov/
+    frequency: as filed (Form 4 <=2 business days; 10-Q/K quarterly)
+    consumers: [fundamental-analyst, insider-analyst]
+  congress_trades:
+    provider: [house_senate_disclosure, capitol_trades]   # STOCK Act
+    frequency: as filed (<=45 days)
+    consumers: [insider-analyst]
+  earnings_calendar:
+    provider: [finnhub, fmp, eodhd, ibkr] # Finnhub free tier (60/min)
+    env: [FINNHUB_API_KEY, FMP_API_KEY]
+    endpoint: https://finnhub.io/api/v1/calendar/earnings
+    frequency: daily refresh (drives the IV cycle + Catalyst)
+    consumers: [catalyst-analyst, decay_signals.py (er_cycle)]
+  ipo_calendar_lockups:
+    provider: [finnhub, fmp]
+    frequency: daily; lock-up = IPO date + 180d (computed)
+    consumers: [catalyst-analyst]
+  company_news:
+    provider: [finnhub]                   # free company news / RSS
+    env: FINNHUB_API_KEY
+    frequency: intraday / overnight digest
+    consumers: [news-analyst, sentiment-analyst]
+  fundamentals_ratios:
+    provider: [fmp, intrinio, sec_edgar]  # EV/EBITDA, P/E, FCF (or compute from EDGAR)
+    env: [FMP_API_KEY]
+    frequency: quarterly (ratios) / daily (price for multiples)
+    consumers: [fundamental-analyst]

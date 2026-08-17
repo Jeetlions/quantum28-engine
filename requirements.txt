@@ -1,0 +1,4 @@
+# Core framework is standard-library only; these are for the LIVE data backends + API pulls.
+tastytrade        # primary options feed (streaming greeks via dxfeed)
+ib_async          # Interactive Brokers (equities / futures / SSF) — maintained fork of ib_insync; needs IB Gateway reachable
+requests          # FRED / EIA / NOAA / Finnhub REST pulls

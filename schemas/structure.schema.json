@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OptionsStructureTicket",
+  "description": "Multi-leg options structure emitted by the Options Strategist (a constructor, not a voter). Built from the fleet's views after the Risk Manager approves.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "agent",
+    "ticker",
+    "as_of",
+    "underlying_type",
+    "strategy",
+    "legs"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "agent": {
+      "const": "options-strategist"
+    },
+    "ticker": {
+      "type": "string"
+    },
+    "as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "underlying_type": {
+      "enum": [
+        "equity",
+        "index"
+      ]
+    },
+    "settlement": {
+      "enum": [
+        "physical",
+        "cash"
+      ]
+    },
+    "exercise_style": {
+      "enum": [
+        "american",
+        "european"
+      ]
+    },
+    "direction_bias": {
+      "enum": [
+        "bullish",
+        "bearish",
+        "neutral"
+      ]
+    },
+    "vol_regime": {
+      "type": "object",
+      "properties": {
+        "iv_rank": {
+          "type": "number"
+        },
+        "term_structure": {
+          "type": "string"
+        }
+      }
+    },
+    "strategy": {
+      "enum": [
+        "vertical_debit",
+        "vertical_credit",
+        "diagonal",
+        "calendar",
+        "double_calendar",
+        "butterfly",
+        "broken_wing_butterfly",
+        "iron_condor",
+        "ratio_backspread",
+        "ratio_frontspread",
+        "reverse_butterfly"
+      ]
+    },
+    "legs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "action",
+          "right",
+          "strike",
+          "expiry"
+        ],
+        "properties": {
+          "action": {
+            "enum": [
+              "buy",
+              "sell"
+            ]
+          },
+          "right": {
+            "enum": [
+              "call",
+              "put"
+            ]
+          },
+          "strike": {
+            "type": "number"
+          },
+          "expiry": {
+            "type": "string"
+          },
+          "qty": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "net": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "debit",
+            "credit"
+          ]
+        },
+        "amount": {
+          "type": "number"
+        }
+      }
+    },
+    "net_greeks": {
+      "type": "object"
+    },
+    "breakevens": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "max_loss": {
+      "type": [
+        "number",
+        "string"
+      ]
+    },
+    "max_gain": {
+      "type": [
+        "number",
+        "string"
+      ]
+    },
+    "pop_pct": {
+      "type": "number"
+    },
+    "rationale": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

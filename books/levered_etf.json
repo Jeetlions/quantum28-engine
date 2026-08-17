@@ -1,0 +1,21 @@
+{
+  "book": "levered_etf",
+  "style": "short-premium decay on levered / inverse / vol ETFs",
+  "tag": "levered-etf-decay",
+  "max_positions": 10,
+  "universe": ["BOIL", "KOLD", "UNG", "UVXY", "UVIX", "SVXY", "VXX", "UCO", "SCO", "GUSH", "DRIP", "NUGT", "DUST", "JNUG", "JDST", "AGQ", "ZSL", "UGL", "TQQQ", "SQQQ", "SPXL", "SPXS", "UPRO", "SOXL", "SOXS", "TNA", "TZA", "NVDL", "TSLL", "MSTU"],
+  "caps": {
+    "max_gross_pct": 4.0,
+    "max_net_pct": 4.0,
+    "max_per_name_pct": 0.5,
+    "max_per_sector_pct": 2.0,
+    "max_per_cluster_pct": 2.0,
+    "risk_budget_pct": 4.0
+  },
+  "constraints": {
+    "defined_risk_only": true,
+    "no_naked_short_vol": true,
+    "cadence": "intraday",
+    "note": "Separate sleeve, its OWN risk budget. Structural decay (vol drag + contango) across vol / nat-gas / crude / precious-metals / levered-index / single-stock ETFs. Signals are evaluated INTRADAY, not just EOD — a decay setup (e.g. VIX spiking to 55 then closing near 30) can vanish by the close. Tail is a vol spike, so DEFINED-RISK structures only; the systemic-stress veto still flattens it."
+  }
+}

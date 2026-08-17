@@ -1,0 +1,157 @@
+# Quantum28 — fleet config.yaml  (the "plumbing" layer for the whole book)
+# Lives at ~/.hermes/config.yaml (or $HERMES_HOME/config.yaml) on the deployed service.
+# Secrets (API keys) go in .env, NOT here. config.yaml wins for non-secret settings.
+#
+# This file decides the *cost profile* of the fleet: which agent runs on which model,
+# what runs as pure Python ($0), what gets cached, and what gets batched. The design
+# target is a ~$60-100 / month LLM bill for a 15-40 name watchlist (see COST ENVELOPE
+# at the bottom). The single biggest lever is that ~half the fleet is deterministic
+# Python and costs nothing — only the judgment seats touch a model.
+
+# ---- Brain: the DEFAULT model + FALLBACKS ---------------------------------
+# `default` is what an agent gets if the routing table below doesn't name it.
+# We default to Sonnet (safe for judgment) rather than Opus, to keep stray calls cheap.
+model:
+  provider: anthropic
+  default: claude-sonnet-5
+  fallback_providers:
+    - provider: anthropic
+      model: claude-haiku-4-5-20251001      # degrade to Haiku if Sonnet is rate-limited
+    - provider: openrouter
+      model: meta-llama/llama-3.3-70b-instruct   # open-weight last resort (public data only)
+
+agent:
+  api_max_retries: 3                  # retry rate-limit / 5xx before failover
+
+# ---- The model tiers (current Claude line, Aug 2026) ----------------------
+# Pricing is per 1,000,000 tokens (input / output). Confirm current rates before relying.
+#   Opus 5    claude-opus-5               $5  / $25   — reserve for on-demand deep dives
+#   Sonnet 5  claude-sonnet-5             $3  / $15   — judgment / reconciliation / veto
+#   Haiku 4.5 claude-haiku-4-5-20251001   $1  / $5    — classification / summarize / overlay
+#   (deterministic Python)               $0  / $0    — the math seats: no model at all
+tiers:
+  opus:          claude-opus-5              # NOT in the scheduled loop — manual escalation only
+  sonnet:        claude-sonnet-5
+  haiku:         claude-haiku-4-5-20251001
+  deterministic: null                       # runs a .py engine; never calls a model
+
+# ---- Per-agent routing table ----------------------------------------------
+# Every seat in the roster is named here so the cost profile is explicit and auditable.
+# "deterministic" seats are backed by a pure-Python engine (the file in parentheses) and
+# cost $0 — they are the reason the bill stays small. Judgment seats run Sonnet; light
+# classification / summarization / overlay reads run Haiku.
+routing:
+  # ---- Sonnet: heavy judgment, reconciliation, veto authority (4 seats) ----
+  fundamental-analyst:      sonnet      # DCF, the thesis — real reasoning
+  macro-analyst:            sonnet      # regime read, FRED/curve interpretation
+  quality-analyst:          sonnet      # forensic accruals; can VETO — worth the reasoning
+  risk-manager:             sonnet      # reconciles all views into THE decision
+
+  # ---- Haiku: classification, summarization, overlay reads (9 seats) -------
+  sentiment-analyst:        haiku       # crowd sentiment → score
+  news-analyst:             haiku       # factual news flow → compile
+  catalyst-analyst:         haiku       # event-calendar mapping
+  insider-analyst:          haiku       # Form-4 interpretation
+  altdata-analyst:          haiku       # card/web/app nowcast read
+  fx-macro-analyst:         haiku       # cross-asset / FX overlay warning
+  credit-analyst:           haiku       # solvency / spread overlay
+  options-analyst:          haiku       # IV / skew / flow read  (GEX sub-calc is deterministic — gex_algo.py, $0)
+  morning-brief:            haiku       # the 07:00 Telegram digest (summarize the queue)
+
+  # ---- Deterministic: pure Python, $0, no model (9 seats) ------------------
+  options-strategist:       deterministic   # strategist.py — places the legs
+  portfolio-cio:            deterministic   # cio.py — allocation + capacity competition
+  position-manager:         deterministic   # position_manager.py — exit / roll / trim rules
+  performance-analyst:      deterministic   # performance.py — the scorecard (PnL, Sortino, DD)
+  structural-decay-analyst: deterministic   # decay_signals.py — the 3-level decay score
+  basis-trader:             deterministic   # basis.py — cash-and-carry arithmetic
+  quant-analyst:            deterministic   # factor-exposure vector — pure math
+  technical-analyst:        deterministic   # levels / momentum indicators — pure math
+  liquidity-analyst:        deterministic   # ADV / spread / crowding — pure math
+
+# ---- Prompt caching: pay for the static framing ONCE ----------------------
+# The big, unchanging prefix each agent sends every call — SOUL.md persona, AGENTS.md
+# fund context, the JSON view schema, the skill text — is identical run to run. Cache it
+# and the input side of every model call drops to a ~10% cache-read rate after the first
+# hit. This is the main reason a 20-agent fleet scanning daily stays double-digit dollars.
+prompt_caching:
+  enabled: true
+  cache:                      # static blocks to mark as cacheable (the prompt prefix)
+    - soul                    # SOUL.md persona / voice
+    - agents_context          # AGENTS.md fund context
+    - view_schema             # schemas/view.schema.json
+    - skills                  # the agent's skill text
+  min_tokens: 1024            # only cache prefixes large enough to matter
+  # NOT cached: the per-ticker payload (prices, filings, the day's flow) — it changes.
+
+# ---- Batch vs interactive: the EOD scan is not time-sensitive --------------
+# The nightly full-watchlist scan (every voter across every name) has no user waiting on
+# it, so route it through the Batch API at 50% off. The HITL path — when YOU tap a card
+# and an agent must respond now — stays on the standard synchronous endpoint.
+execution:
+  eod_pipeline:
+    mode: batch               # Batch API — 50% cheaper, async, fine for the overnight scan
+    window: "16:45 ET"        # after the 16:30 performance mark; results ready pre-open
+  interactive:
+    mode: sync                # HITL resume / on-demand queries — answer immediately
+  zero_dte:
+    mode: sync                # 0DTE gamma read is same-session; can't wait on a batch
+
+# ---- On-demand escalation to Opus (OFF the scheduled loop) -----------------
+# Nothing in the automated schedule calls Opus — it would blow the envelope. Opus is
+# available only when YOU ask for a deep dive on a single name (e.g. /model opus then a
+# fundamental re-underwrite). One-off, PM-initiated, not budgeted into the monthly run.
+escalation:
+  opus_on_demand: true
+  scheduled_opus: false       # guardrail: the cron/scheduler must never select Opus
+
+# ---- Data governance (unchanged, non-negotiable) --------------------------
+# Free / open-weight endpoints (the Llama fallback, any cheap summarizer) may log or train
+# on inputs. Send them ONLY non-sensitive public data — public-post sentiment, public
+# filings. NEVER proprietary positions, the book, the models, or the risk decision.
+governance:
+  free_tier_public_data_only: true
+
+# ---- Context compression (long-run summarizer on a cheap model) -----------
+compression:
+  enabled: true
+  threshold: 0.50
+  target_ratio: 0.20
+  protect_last_n: 20
+  protect_first_n: 3
+auxiliary:
+  compression:
+    provider: anthropic
+    model: claude-haiku-4-5-20251001   # summarize long threads on Haiku, not Sonnet
+
+# ---- Memory / tools / sandbox ---------------------------------------------
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+  write_approval: false
+tool_output:
+  max_bytes: 40000
+context_file_max_chars: 20000
+skills:
+  write_approval: true
+terminal:
+  backend: docker
+
+# ===========================================================================
+# COST ENVELOPE (illustrative — a 15-40 name book, scanned once daily)
+# ---------------------------------------------------------------------------
+#   Deterministic seats (9) .................................. $0
+#   Per name, per scan: ~9 Haiku calls + ~4 Sonnet calls
+#     Haiku  ~72k in + 9k out  -> ~$0.12/name
+#     Sonnet ~40k in + 6k out  -> ~$0.21/name
+#     subtotal ................................................ ~$0.33 / name / scan
+#   Prompt caching (static prefix cached) ....... input side ~-15%  -> ~$0.28
+#   Batch API on the EOD scan (50% off) ..................... -> ~$0.14 / name / scan
+#   Monthly (21 trading days):
+#     15 names  ~15 x 21 x $0.14  ..............................  ~$44
+#     30 names  ~30 x 21 x $0.14  ..............................  ~$88
+#     40 names  ~40 x 21 x $0.14  ..............................  ~$118
+#   Intraday decay + 0DTE gamma reads: deterministic / a few Haiku calls -> negligible.
+#   => a 15-40 name watchlist lands in the ~$60-100/mo envelope. Caching + batch are
+#      what get it there; drop to Sonnet-only judgment + Haiku overlays keeps it stable.
+# ===========================================================================

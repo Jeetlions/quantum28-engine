@@ -1,0 +1,25 @@
+# ---- secrets — never commit ----
+.env
+
+# ---- python / os clutter ----
+__pycache__/
+*.pyc
+*.tmp
+.DS_Store
+
+# ---- runtime state (recreated on the Railway volume at deploy; not code) ----
+orders/
+pending_approvals/
+shared/
+positions/
+portfolio/
+basis/
+
+# ---- benchmarks/: keep the CODE (benchmark.py) and any committed *.seed.jsonl,
+#      but ignore the runtime logs and generated outputs that accrue beside it ----
+benchmarks/*.jsonl
+!benchmarks/*.seed.jsonl
+benchmarks/analyst_weights.json
+benchmarks/performance_report.json
+benchmarks/calibration.json
+benchmarks/equity_curve.svg

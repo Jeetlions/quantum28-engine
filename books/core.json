@@ -1,0 +1,16 @@
+{
+  "book": "core",
+  "style": "multi-strategy equity + index options + basis",
+  "tag": "core",
+  "max_positions": 40,
+  "universe": null,
+  "caps": {
+    "max_gross_pct": 12.0,
+    "max_net_pct": 8.0,
+    "max_per_name_pct": 3.0,
+    "max_per_sector_pct": 3.5,
+    "max_per_cluster_pct": 3.5,
+    "risk_budget_pct": 3.0
+  },
+  "note": "The main Quantum28 book. Universe null = no ticker restriction beyond the auth allowlist."
+}

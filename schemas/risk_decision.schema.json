@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RiskDecision",
+  "description": "Structured output emitted by the Risk Manager after reconciling both analyst views.",
+  "type": "object",
+  "required": ["schema_version", "agent", "ticker", "as_of", "agreement", "decision", "confidence"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "agent": {"const": "risk-manager"},
+    "ticker": {"type": "string"},
+    "as_of": {"type": "string", "format": "date-time"},
+    "inputs": {
+      "type": "object",
+      "properties": {
+        "fundamental": {"type": "string"},
+        "technical": {"type": "string"}
+      }
+    },
+    "agreement": {"enum": ["aligned", "mixed", "conflicting"]},
+    "decision": {"enum": ["approve", "reduce", "reject", "hold"]},
+    "approved_position": {
+      "type": "object",
+      "properties": {
+        "side": {"enum": ["long", "short", "none"]},
+        "size_pct_nav": {"type": "number", "minimum": 0},
+        "max_loss_pct_nav": {"type": "number", "minimum": 0}
+      }
+    },
+    "stop_loss": {"type": ["number", "null"]},
+    "rationale": {"type": "array", "items": {"type": "string"}},
+    "conditions": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"enum": ["low", "medium", "high"]}
+  }
+}
