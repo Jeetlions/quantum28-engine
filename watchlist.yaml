@@ -5,24 +5,24 @@
 equities:                 # FULL 14-analyst equity vote (the Hermes/Claude brain) — scanned daily
   pipeline: equity_vote
   note: >
-    Top ~30 Nasdaq-100 by market cap (snapshot, 2026). Membership and ranking drift as prices move
-    and the index rebalances quarterly — treat this as a starting universe and edit as you like.
-  tickers: [NVDA, AAPL, MSFT, AMZN, GOOGL, META, AVGO, TSLA, COST, NFLX,
-            TMUS, PLTR, CSCO, AMD,  PEP,  LIN,  INTU, ADBE, TXN,  QCOM,
-            AMAT, MU,   AMGN, ISRG, BKNG, HON,  ADP,  GILD, VRTX, MRVL]
+    A trimmed ~17-name large-cap Nasdaq set (from the top-30 by market cap, 2026). Mostly tech,
+    semis, software and one biotech (AMGN). Each name costs ~$3/mo on the daily vote — edit freely.
+  tickers: [NVDA, AAPL, MSFT, AMZN, GOOGL, META, AVGO, TSLA, NFLX,
+            PLTR, CSCO, AMD,  INTU, ADBE, QCOM, MU,   AMGN]
 
 indices:                  # 0DTE dealer-gamma trade (09:35 + 12:30 ET) — already scheduled
   pipeline: zero_dte
   tickers: [SPX, NDX, RUT]
 
-commodities:              # options + structural-decay sleeve
-  pipeline: options_decay
+commodities:              # directional OPTIONS only (spot-backed metals — no decay)
+  pipeline: options
   note: >
-    Tradeable TODAY as defined-risk OPTIONS on the liquid ETFs via Tastytrade; the structural-decay
-    engine already scans their levered versions every 30 min. Direct futures (GC/SI/NG/CL on IB)
-    come online once IB Gateway is hosted somewhere the cloud service can reach.
-  tickers: [GLD, SLV, UNG, USO]          # gold, silver, natural gas, crude — ETF proxies
-  futures_when_ib: [GC, SI, NG, CL]      # the direct instruments, pending IB hosting
+    GLD and SLV are SPOT-backed (physically held metal), so they DON'T structurally decay — they are
+    directional defined-risk OPTIONS candidates only. Nat-gas and crude decay is handled elsewhere:
+    the levered-ETF decay sleeve already scans BOIL/KOLD (nat gas), UCO/SCO (crude) and the levered
+    metals (AGQ/ZSL, NUGT/DUST) every 30 min. Direct GC/SI futures come online once IB is hosted.
+  tickers: [GLD, SLV]                    # gold, silver — spot ETFs, options only
+  futures_when_ib: [GC, SI]             # gold / silver futures, pending IB hosting
 
 fx:                       # MONITOR-ONLY — feeds the fx-macro risk lens; no FX execution pipeline
   pipeline: monitor
@@ -32,7 +32,7 @@ fx:                       # MONITOR-ONLY — feeds the fx-macro risk lens; no FX
 crypto:                   # MONITOR-ONLY — no crypto analyst/execution pipeline; ZEC not on Tasty/IB
   pipeline: monitor
   note: Prices watched for context only. Building a crypto trading pipeline is a separate project.
-  tickers: [BTC, ETH, ZEC]
+  tickers: [BTC, ETH]
 
 schedule:
   equity_scan_et: "17:00"        # weekday ET time for the daily equity vote (EOD / overnight batch)
