@@ -52,6 +52,19 @@ class Handler(BaseHTTPRequestHandler):
         self._send(204, {})
 
     def do_GET(self):
+        if self.path.startswith("/api/health"):     # unauthenticated, leaks no secret — browser-checkable
+            info = {"ok": True}
+            try:
+                import llm
+                info["llm_live"] = llm.live_enabled()
+                info["mock_forced"] = os.environ.get("Q28_LLM_MOCK", "0") == "1"
+                info["key_present"] = bool(os.environ.get("ANTHROPIC_API_KEY"))
+                info["sonnet_model"] = llm.model_for("fundamental-analyst")
+                info["haiku_model"] = llm.model_for("sentiment-analyst")
+            except Exception as e:
+                info["llm_live"] = False
+                info["error"] = f"{type(e).__name__}: {e}"
+            return self._send(200, info)
         if not self._authed():
             return self._send(401, {"error": "unauthorized"})
         if self.path.startswith("/api/pending"):
