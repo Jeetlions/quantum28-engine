@@ -52,6 +52,20 @@ class Handler(BaseHTTPRequestHandler):
         self._send(204, {})
 
     def do_GET(self):
+        if self.path == "/" or self.path.split("?")[0].startswith("/dashboard"):
+            # Serve the dashboard page itself (no token needed to LOAD it; the API calls it makes still
+            # require the token, which the page asks for once and keeps in the browser). Reachable from
+            # any browser, including your phone, at the Railway URL.
+            try:
+                html = (BASE / "quantum28_dashboard.html").read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(html)
+            except Exception as e:
+                self._send(500, {"error": f"dashboard unavailable: {e}"})
+            return
         if self.path.startswith("/api/health"):     # unauthenticated, leaks no secret — browser-checkable
             info = {"ok": True}
             try:
