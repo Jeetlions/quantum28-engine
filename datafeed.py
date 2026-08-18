@@ -395,13 +395,16 @@ class DataFeed:
         term = "contango" if b > f * 1.02 else ("backwardation" if f > b * 1.02 else "flat")
         calls = sum(l["open_interest"] for l in chain["legs"] if l["right"] == "call")
         puts = sum(l["open_interest"] for l in chain["legs"] if l["right"] == "put")
+        gblock = compute_gex(chain)
+        gblock.setdefault("spot", spot)         # carry the real underlying so 0DTE centers correctly
         return {
             "iv": round(atm["iv"], 4),
             "iv_rank": None,                    # TODO: needs an IV history series (add a store)
             "term_structure": term,
             "put_call": round(puts / calls, 2) if calls else None,
             "tenor": tenor,
-            "gamma": compute_gex(chain),        # <-- your algorithm (or placeholder)
+            "spot": spot,                       # real underlying price (0DTE strike centering)
+            "gamma": gblock,                    # <-- your algorithm (or placeholder); also carries spot
             "source": chain["_source"], "as_of": chain["as_of"],
         }
 

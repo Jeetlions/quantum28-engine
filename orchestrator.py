@@ -290,7 +290,7 @@ def invoke_agent(agent: dict, ticker: str, demo: bool) -> dict:
                 if feed.active() not in ("demo", "none"):
                     live = feed.options_block(ticker, tenor=view["options"].get("tenor"))
                     view["options"]["gamma"] = live["gamma"]
-                    for k in ("term_structure", "iv", "put_call"):
+                    for k in ("term_structure", "iv", "put_call", "spot"):
                         if live.get(k) is not None:
                             view["options"][k] = live[k]
                     print(f"[datafeed] options-analyst: LIVE gamma via {feed.active()} "

@@ -63,7 +63,11 @@ def build_structure(ticker, side, vote_net, views):
     o = views.get("options-analyst", {}).get("options", {})
     c = views.get("catalyst-analyst", {}).get("catalyst", {})
 
-    spot = (f.get("fair_value", {}) or {}).get("current") or 100.0
+    _g0 = o.get("gamma", {}) or {}
+    spot = (o.get("spot") or _g0.get("spot")                  # live underlying from the feed (0DTE/index)
+            or (f.get("fair_value", {}) or {}).get("current")  # equity vote: from the fundamental view
+            or _g0.get("gamma_pin") or _g0.get("gamma_flip") or _g0.get("call_wall")  # real gamma level
+            or 100.0)
     lvl = t.get("levels", {}) or {}
     support = lvl.get("support", _rs(spot * 0.95))
     resistance = lvl.get("resistance", _rs(spot * 1.06))
