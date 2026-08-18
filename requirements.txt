@@ -2,3 +2,5 @@
 tastytrade        # primary options feed (streaming greeks via dxfeed)
 ib_async          # Interactive Brokers (equities / futures / SSF) — maintained fork of ib_insync; needs IB Gateway reachable
 requests          # FRED / EIA / NOAA / Finnhub REST pulls
+anthropic         # Claude API for the judgment analysts (llm.py) — only used in --real/live mode
+pyyaml            # parse config.yaml per-agent model routing (llm.py)

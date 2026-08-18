@@ -162,7 +162,7 @@ def atomic_write_json(path: Path, obj: dict) -> None:
 def authorize(caller: str, ticker: str) -> None:
     # Authentication: WHO may invoke. Real systems authenticate at the gateway;
     # here we check a simple allowlist (would come from config / identity provider).
-    allowed_callers = set(filter(None, os.environ.get("ORCH_ALLOWED_CALLERS", "demo-pm,pm-desk").split(",")))
+    allowed_callers = set(filter(None, os.environ.get("ORCH_ALLOWED_CALLERS", "demo-pm,pm-desk,scheduler").split(",")))
     if caller not in allowed_callers:
         raise AuthError(f"caller '{caller}' is not authorized to run the pipeline")
     # Authorization: WHAT may be touched. Restricted list lives with the fund config.
@@ -235,23 +235,22 @@ def _parse(ts: str) -> datetime:
 def invoke_agent(agent: dict, ticker: str, demo: bool) -> dict:
     """Produce this agent's view file.
 
-    REAL MODE (integration point): spawn the Hermes subagent, e.g.
-        delegate_task(agent=agent['name'], prompt=<self-contained task for `ticker`>)
-    or shell out to the `hermes` CLI. The child is isolated, so everything it needs
-    goes in the prompt, and its structured result is written to shared/<output>.
+    REAL MODE (--real): the Hermes/Claude brain in llm.py produces the view. With an ANTHROPIC_API_KEY
+    set it runs the analyst live on the model routed in config.yaml (Sonnet for judgment, Haiku for the
+    lighter reads); with no key it returns a neutral, schema-valid stub so the whole pipeline still runs
+    offline. Deterministic seats (technical/quant/liquidity) return a computed stub until their own
+    engines are wired. The result is always schema-valid and is trusted only after output_guardrail.
 
-    DEMO MODE: refresh the committed sample view with a current timestamp so the
-    pipeline runs end to end without live models. The sentiment agent also runs a
-    small input-guardrail demo over simulated untrusted posts.
+    DEMO MODE: refresh the committed sample view with a current timestamp. The sentiment/news agents
+    also run a small input-guardrail demo over simulated untrusted posts.
     """
     out = SHARED / agent["output"]
     if not demo:
-        raise NotImplementedError(
-            "Real mode: call Hermes delegate_task / the hermes CLI here, then let it "
-            "write shared/%s. Wire this to your deployment." % agent["output"]
-        )
-
-    if not out.exists():
+        import llm                                  # the model brain (Claude, or a neutral mock)
+        view = llm.produce_view(agent, ticker)
+        mode = "live" if llm.live_enabled() and llm.tier_for(agent["name"]) != "deterministic" else "mock"
+        print(f"[brain] {agent['name']}: {mode} view via {llm.model_for(agent['name']) or 'deterministic'}")
+    elif not out.exists():
         if agent["name"] == "options-analyst":
             # No committed seed is needed for the gamma trade — synthesize a minimal, schema-valid
             # options view; the live-gamma overlay below fills it from the shared datafeed.
@@ -263,7 +262,7 @@ def invoke_agent(agent: dict, ticker: str, demo: bool) -> dict:
     else:
         view = json.loads(out.read_text())
 
-    if agent["name"] in ("sentiment-analyst", "news-analyst"):
+    if demo and agent["name"] in ("sentiment-analyst", "news-analyst"):
         # Untrusted content arriving via an MCP / social / news server.
         raw_posts = [
             "NVDA data-center demand looks strong into next quarter",
@@ -632,8 +631,19 @@ def suspend_for_approval(decision: dict, caller: str, structure: dict | None = N
     atomic_write_json(PENDING / f"{approval_id}.json", record)   # durable: survives restart
     struct_line = ""
     if structure:
+        legs_txt = "\n".join(
+            f"  • {l['action']} {l.get('qty', 1)}x {l['right']} {l['strike']}"
+            + (f"  ({l['expiry']})" if l.get('expiry') else "")
+            for l in structure.get("legs", []))
+        net = structure.get("net", {}) or {}
+        net_txt = f"{net.get('type', '?')} {net.get('amount', '')}".strip()
         struct_line = (f"\nOptions structure: {structure['strategy']} "
-                       f"({structure['underlying_type']}, {len(structure['legs'])} legs)")
+                       f"({structure['underlying_type']}, {len(structure['legs'])} legs)\n"
+                       f"{legs_txt}\n"
+                       f"net {net_txt} · max loss {structure.get('max_loss', '?')} · "
+                       f"max gain {structure.get('max_gain', '?')}")
+        if structure.get("breakevens"):
+            struct_line += f" · breakevens {structure['breakevens']}"
     msg = (f"*Trade approval needed* ({approval_id})\n"
            f"{decision['ticker']}: {decision['decision'].upper()} "
            f"{pos['side']} {pos['size_pct_nav']}% NAV\n"

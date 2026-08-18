@@ -59,10 +59,27 @@ class Handler(BaseHTTPRequestHandler):
             if PENDING.exists():
                 for f in sorted(PENDING.glob("*.json")):
                     r = json.loads(f.read_text())
-                    if r.get("status") == "awaiting_human":
-                        items.append({"approval_id": r["approval_id"], "kind": r.get("kind", "trade"),
-                                      "created_at": r.get("created_at"),
-                                      "summary": r.get("basis_trade") or r.get("action") or r.get("decision", {}).get("ticker")})
+                    if r.get("status") != "awaiting_human":
+                        continue
+                    st = r.get("structure_ticket") or {}
+                    dec = r.get("decision") or {}
+                    items.append({
+                        "approval_id": r["approval_id"],
+                        "kind": r.get("kind", "trade"),
+                        "created_at": r.get("created_at"),
+                        "ticker": dec.get("ticker") or (r.get("basis_trade") or {}).get("ticker"),
+                        "agreement": dec.get("agreement"),
+                        "structure": ({                      # legs + risk for the approval card
+                            "strategy": st.get("strategy"),
+                            "underlying_type": st.get("underlying_type"),
+                            "legs": st.get("legs", []),
+                            "net": st.get("net"),
+                            "max_loss": st.get("max_loss"),
+                            "max_gain": st.get("max_gain"),
+                            "breakevens": st.get("breakevens"),
+                        } if st else None),
+                        "summary": r.get("basis_trade") or r.get("action") or dec.get("ticker"),
+                    })
             return self._send(200, {"pending": items})
         if self.path.startswith("/api/performance"):
             return self._send(200, json.loads(PERF.read_text()) if PERF.exists() else {})

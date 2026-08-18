@@ -62,15 +62,18 @@ def due(dt):
     wd, h, m = dt.weekday(), dt.hour, dt.minute        # wd 0=Mon..4=Fri
     biz = wd < 5
     jobs = []
-    zero_dte = [["orchestrator.py", "run", "--ticker", "SPX", "--tenor", "0DTE"],
-                ["orchestrator.py", "run", "--ticker", "NDX", "--tenor", "0DTE"]]
+    zero_dte = [["orchestrator.py", "run", "--ticker", t, "--tenor", "0DTE"]
+                for t in ("SPX", "NDX", "RUT")]                                      # 3 indices
     if biz and h == 7 and m == 0:            jobs.append(["brief.py"])
     if biz and h == 9 and m == 35:           jobs += zero_dte                       # 0DTE breakouts
+    if biz and h == 9 and m == 45:           jobs.append(["scan_watchlist.py", "--bucket", "monitor"])
     if biz and h == 12 and m == 30:          jobs += zero_dte                       # 0DTE flies (midday)
     if biz and 10 <= h < 16 and not (h == 15 and m > 30) and m in (0, 30):
         jobs.append(["decay_signals.py"])                                           # INTRADAY decay
     if biz and h in (10, 14) and m == 0:     jobs.append(["basis.py"])              # basis (monitor-only)
+    if biz and h == 15 and m == 45:          jobs.append(["scan_watchlist.py", "--bucket", "monitor"])
     if biz and h == 16 and m == 30:          jobs.append(["performance.py"])
+    if biz and h == 17 and m == 0:           jobs.append(["scan_watchlist.py", "--bucket", "equities"])  # daily equity vote
     if wd == 4 and h == 18 and m == 0:       jobs.append(["benchmarks/benchmark.py"])   # weekly re-weight
     if wd == 4 and h == 18 and m == 30:      jobs.append(["calibration.py"])            # weekly re-calibrate
     return jobs
