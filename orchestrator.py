@@ -40,7 +40,8 @@ FRESHNESS_SECONDS = 24 * 3600          # a view older than this is rejected as s
 MAX_SINGLE_NAME_SIZE = 2.5             # % NAV
 RISK_BUDGET_PCT = 0.60                 # max modeled loss per name, % NAV
 AGREE_THRESHOLD = 0.55                 # |weighted net conviction| needed for an "aligned" (full-size) call
-MIN_CONVICTION = 0.60                  # dead-band: |net| below this = NO directional trade (cuts trade count).
+MIN_CONVICTION = float(os.environ.get("MIN_CONVICTION", "0.60"))   # dead-band: |net| below this = NO
+#   directional trade (cuts trade count). Tune from the env (e.g. 0.70 on noisy days) — no code change.
                                        # Raise it (e.g. 0.70) to trade less and only the strongest signals.
 SYSTEMIC_STRESS = -0.8                 # overlay score at/below this = systemic seizure -> flatten BOTH sides
 NEUTRAL_IVR = 50                       # IV rank at/above this makes a range/premium trade attractive

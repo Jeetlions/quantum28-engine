@@ -99,6 +99,10 @@
     <button class="tab" data-s="decay">Decay Desk</button>
   </div>
 
+  <div style="margin:6px 0 14px;padding:9px 14px;border-radius:10px;border:1px solid #B7791F;background:rgba(183,121,31,.12);color:#e6c07a;font-size:13px;font-family:ui-monospace,monospace">
+    ⚠ Illustrative view — only <b style="color:#34d399">Pending Approvals</b> is LIVE (real data from your bridge). Every other panel, KPI and chart shows <b>sample / illustrative</b> data as a layout template, until its live feed is wired.
+  </div>
+
   <!-- ============ COMMAND DECK ============ -->
   <section class="screen active" id="scr-deck">
     <div class="kpis">
@@ -123,12 +127,12 @@
         </div>
       </div>
       <div class="col">
-        <div class="card"><h3>Pending Approvals <span class="tag">Telegram HITL</span></h3><div class="body" id="apprBody">
+        <div class="card"><h3>Pending Approvals <span class="tag" style="background:rgba(52,211,153,.18);color:#34d399;border-color:#34d399">● LIVE · Telegram HITL</span></h3><div class="body" id="apprBody">
           <div class="appr" data-id="BASIS-CRSH-30d-20260808"><div class="r1"><span class="s">CRSH</span><span class="chip c-long">BASIS · cash&carry</span><span class="k">+42.5%/yr</span></div><div class="meta">30d future 62.4 vs fair 60.26 · buy spot / short future</div><div class="btns"><button class="btn ok" data-a="Approve the CRSH basis cash-and-carry">APPROVE</button><button class="btn no" data-a="Disapprove the CRSH basis trade">DISAPPROVE</button></div></div>
           <div class="appr" data-id="SPX-0DTE-20260808"><div class="r1"><span class="s">SPX</span><span class="chip c-hold">0DTE · BWB</span><span class="k">midday</span></div><div class="meta">zero-cost broken-wing on gamma pin 5960 · fresh 6m</div><div class="btns"><button class="btn ok" data-a="Approve the SPX 0DTE broken-wing butterfly">APPROVE</button><button class="btn no" data-a="Disapprove the SPX 0DTE fly">DISAPPROVE</button></div></div>
           <div class="appr" data-id="NDX-0DTE-20260808"><div class="r1"><span class="s">NDX</span><span class="chip c-short">0DTE · backspread</span><span class="k">breakout</span></div><div class="meta">negative gamma below flip → put ratio backspread</div><div class="btns"><button class="btn ok" data-a="Approve the NDX 0DTE put backspread">APPROVE</button><button class="btn no" data-a="Disapprove the NDX 0DTE backspread">DISAPPROVE</button></div></div>
         </div></div>
-        <div class="card"><h3>Basis Dislocations <span class="tag">single-stock futures</span></h3>
+        <div class="card"><h3>Basis Dislocations <span class="tag" style="color:#e6c07a">single-stock futures · SAMPLE</span></h3>
           <table><thead><tr><th>Name</th><th>Exp</th><th>Signal</th><th>Edge/yr</th></tr></thead><tbody>
             <tr><td class="sym">CRSH</td><td>30d</td><td class="c-long">cash&carry</td><td class="up">+42.5%</td></tr>
             <tr><td class="sym">XYZ</td><td>30d</td><td class="c-short">reverse</td><td class="up">+24.3%</td></tr>
