@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Orchestrator (the supervisor) for the multi-agent risk pipeline.
+Nexus — the orchestrator (the supervisor / conductor) for the multi-agent risk pipeline.
 
-Runs N analyst agents, each of which writes a structured `*_view.json` to shared/,
-then runs the Risk Manager, which reads all views and writes shared/risk_decision.json.
+Nexus has no market view of its own: it cues the fleet, routes the shared JSON files between
+agents, enforces the guardrails and the auth gate, runs the vote, and hands every decision to the
+human-in-the-loop. Runs N analyst agents, each of which writes a structured `*_view.json` to
+shared/, then runs the Risk Manager, which reads all views and writes shared/risk_decision.json.
 
 Pure standard library — no third-party deps — so it runs anywhere.
 

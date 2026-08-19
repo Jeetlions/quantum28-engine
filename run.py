@@ -29,7 +29,7 @@ def mount_state():
     """Put durable state on the volume; copy any committed seeds over once, then symlink."""
     vol = os.environ.get("STATE_DIR") or os.environ.get("RAILWAY_VOLUME_MOUNT_PATH")
     if not vol:
-        print("[run] no volume ($STATE_DIR / $RAILWAY_VOLUME_MOUNT_PATH) — using local dirs")
+        print("[nexus] no volume ($STATE_DIR / $RAILWAY_VOLUME_MOUNT_PATH) — using local dirs")
         return
     for d in STATE_DIRS:
         tgt = Path(vol) / d; tgt.mkdir(parents=True, exist_ok=True)
@@ -43,13 +43,13 @@ def mount_state():
                     (shutil.copytree if f.is_dir() else shutil.copy2)(f, dest)
             shutil.rmtree(link)
         link.symlink_to(tgt)
-    print(f"[run] state on volume {vol}")
+    print(f"[nexus] state on volume {vol}")
 
 
 def start_bridge():
     import server                                       # server.py Handler; binds 0.0.0.0:$PORT
     port = int(os.environ.get("PORT") or os.environ.get("QUANTUM_API_PORT", "8787"))
-    print(f"[run] bridge on 0.0.0.0:{port} (auth {'ON' if os.environ.get('QUANTUM_API_TOKEN') else 'OFF'})")
+    print(f"[nexus] bridge on 0.0.0.0:{port} (auth {'ON' if os.environ.get('QUANTUM_API_TOKEN') else 'OFF'})")
     ThreadingHTTPServer(("0.0.0.0", port), server.Handler).serve_forever()
 
 
@@ -80,17 +80,17 @@ def due(dt):
 
 
 def run_job(cmd):
-    print(f"[run] {now_et():%Y-%m-%d %H:%M ET}  ->  {' '.join(cmd)}")
+    print(f"[nexus] {now_et():%Y-%m-%d %H:%M ET}  ->  {' '.join(cmd)}")
     try:
         subprocess.Popen([sys.executable] + cmd, cwd=str(BASE))
     except Exception as e:
-        print("[run] job failed:", e)
+        print("[nexus] job failed:", e)
 
 
 def main():
     mount_state()
     threading.Thread(target=start_bridge, daemon=True).start()
-    print("[run] scheduler up (US/Eastern). OBSERVE/PAPER — every trade waits for your tap.")
+    print("[nexus] scheduler up (US/Eastern). OBSERVE/PAPER — every trade waits for your tap.")
     last = None
     while True:
         dt = now_et(); key = (dt.hour, dt.minute)

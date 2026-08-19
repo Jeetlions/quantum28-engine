@@ -285,10 +285,34 @@ class TastytradeBackend(Backend):
         return _run(self._aquotes([s.upper() for s in symbols]))
 
 
+def _f(v):
+    """float-or-None, treating NaN and non-positive as missing."""
+    try:
+        v = float(v)
+        return v if (v == v and v > 0) else None
+    except Exception:
+        return None
+
+
+def _first_px(t):
+    """Best available price from an ib_async Ticker: last -> close -> mid."""
+    for v in (getattr(t, "last", None), getattr(t, "close", None)):
+        p = _f(v)
+        if p is not None:
+            return p
+    b, a = _f(getattr(t, "bid", None)), _f(getattr(t, "ask", None))
+    return round((b + a) / 2, 4) if (b and a) else None
+
+
 class IBKRBackend(Backend):
-    """FALLBACK. TWS / IB Gateway must be running. Fuller chain + equities/futures/basis.
-    Fill the call sites with ib_async (maintained fork of ib_insync) — reqSecDefOptParams → reqMktData greeks."""
+    """Interactive Brokers via IB Gateway / TWS (ib_async). Its job in this fleet is the pieces
+    Tastytrade does NOT give: the VIX / nat-gas / crude FUTURES CURVES (front vs second month) that
+    the decay engine needs, plus equity/ETF quotes and (later) SSF basis + borrow. Option chains and
+    greeks stay on Tastytrade. Read-only: it only requests market data, never places an order.
+    IB Gateway must be running and reachable at IB_HOST:IB_PORT (4002 = paper gateway)."""
     name = "ibkr"
+    _ib = None
+
     def available(self) -> bool:
         if os.environ.get("IB_ENABLED", "0") != "1":
             return False
@@ -297,13 +321,68 @@ class IBKRBackend(Backend):
             return True
         except Exception:
             return False
-    def get_chain(self, symbol: str) -> dict:
-        # from ib_async import IB, Index, Stock
-        #   ib = IB(); ib.connect(host, port, clientId)
-        #   params = ib.reqSecDefOptParams(...); reqMktData(option, "106",...) for greeks (mind lines)
-        raise DataFeedError("ibkr backend not wired to a live TWS/Gateway in this environment")
+
+    def _connect(self):
+        from ib_async import IB
+        ib = IBKRBackend._ib
+        if ib is not None and ib.isConnected():
+            return ib
+        ib = IB()
+        ib.connect(os.environ.get("IB_HOST", "127.0.0.1"),
+                   int(os.environ.get("IB_PORT", "4002")),
+                   clientId=int(os.environ.get("IB_CLIENT_ID", "17")),
+                   timeout=int(os.environ.get("IB_TIMEOUT", "15")),
+                   readonly=True)
+        # If real-time isn't entitled for a contract, fall back to delayed rather than nothing.
+        try:
+            ib.reqMarketDataType(int(os.environ.get("IB_MKT_DATA_TYPE", "1")))   # 1 live, 3 delayed
+        except Exception:
+            pass
+        IBKRBackend._ib = ib
+        return ib
+
+    def disconnect(self):
+        if IBKRBackend._ib is not None and IBKRBackend._ib.isConnected():
+            IBKRBackend._ib.disconnect()
+        IBKRBackend._ib = None
+
     def get_quotes(self, symbols):
-        raise DataFeedError("ibkr backend not wired")
+        from ib_async import Stock
+        ib = self._connect()
+        contracts = [Stock(s.upper(), "SMART", "USD") for s in symbols]
+        ib.qualifyContracts(*contracts)
+        tickers = ib.reqTickers(*contracts)
+        out = {}
+        for s, t in zip(symbols, tickers):
+            out[s.upper()] = {"bid": _f(getattr(t, "bid", None)),
+                              "ask": _f(getattr(t, "ask", None)),
+                              "last": _first_px(t)}
+        return out
+
+    def futures_curve(self, root: str, exchange: str, n: int = 2) -> dict:
+        """Front/second (or more) listed futures for a root -> {front, second, ratio}. The RATIO
+        (front/second) is the decay engine's curve signal: <1 contango, >1 backwardation. Roots:
+        VIX on CFE, NG and CL on NYMEX."""
+        from ib_async import Future
+        ib = self._connect()
+        cds = ib.reqContractDetails(Future(root, exchange=exchange))
+        contracts = sorted((cd.contract for cd in cds),
+                           key=lambda c: c.lastTradeDateOrContractMonth)[:n]
+        if not contracts:
+            return {"root": root, "front": None, "second": None, "ratio": None, "note": "no contracts"}
+        ib.qualifyContracts(*contracts)
+        prices = [_first_px(t) for t in ib.reqTickers(*contracts)]
+        front, second = (prices + [None, None])[:2]
+        ratio = round(front / second, 4) if (front and second) else None
+        return {"root": root, "exchange": exchange, "front": front, "second": second,
+                "ratio": ratio, "front_expiry": contracts[0].lastTradeDateOrContractMonth,
+                "regime": (None if ratio is None else ("backwardation" if ratio > 1.0 else "contango")),
+                "as_of": _now_iso()}
+
+    def get_chain(self, symbol: str) -> dict:
+        # Option chains + greeks are Tastytrade's job (streaming dxfeed). IB is here for futures
+        # curves, quotes, basis and borrow — not chains.
+        raise DataFeedError("IB backend does not serve option chains — Tastytrade is primary for those")
 
 
 class DemoBackend(Backend):

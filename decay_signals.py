@@ -27,8 +27,24 @@ Everything is a documented heuristic per the book ("weights matter less than con
 Pure standard library.
 """
 from __future__ import annotations
-import json
+import json, os
 from datetime import datetime, timezone
+from pathlib import Path
+
+
+def _load_env():
+    """Minimal .env loader so a LOCAL run sees EIA_API_KEY etc. (on Railway the vars are already set)."""
+    try:
+        for line in (Path(__file__).resolve().parent / ".env").read_text().splitlines():
+            s = line.strip()
+            if s and not s.startswith("#") and "=" in s:
+                k, v = s.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    except FileNotFoundError:
+        pass
+
+
+_load_env()
 
 # ---- instrument classes & per-class weights ---------------------------------
 # vol / natgas / single-stock are the book's classes (5.6 / C.6) verbatim. crude / metals /
@@ -269,8 +285,139 @@ def _structure_hint(cls, composite, m):
             "note": "sell premium above; defined-risk credit spread when the down-move is lower conviction"}
 
 
+# ---- live futures curves: FREE sources first, IB Gateway only as fallback ---
+# The engine needs three front/second ratios — VX1/VX2 (vol), NG1/NG2 (nat gas), CL1/CL2 (crude).
+# Primary sources are FREE and run anywhere (no IB Gateway, no 2FA, no VPS): EIA for the nat-gas and
+# crude NYMEX settlement curves (your EIA_API_KEY), and the VIX / VIX3M index ratio (Cboe) as the vol
+# term-structure proxy. IB Gateway is consulted only for whatever a free source couldn't return.
+_CURVES = None
+_CURVES_SRC = {}
+CURVE_KEY_BY_CLASS = {"vol": "vx1_vx2", "natgas": "ng1_ng2", "crude": "cl1_cl2"}
+_CURVE_ROOTS = {"vx1_vx2": ("VIX", "CFE"), "ng1_ng2": ("NG", "NYMEX"), "cl1_cl2": ("CL", "NYMEX")}
+
+
+def _get(url, **kw):
+    import requests
+    r = requests.get(url, timeout=int(os.environ.get("HTTP_TIMEOUT", "15")),
+                     headers={"User-Agent": "Quantum28/1.0"}, **kw)
+    r.raise_for_status()
+    return r
+
+
+_EIA_ROUTE = {"RNGC1": "natural-gas/pri/fut", "RNGC2": "natural-gas/pri/fut",
+              "RCLC1": "petroleum/pri/fut", "RCLC2": "petroleum/pri/fut"}
+
+
+def _eia_series(series):
+    """Latest daily settlement for an EIA futures series (RNGC1/2 = Henry Hub nat gas, RCLC1/2 = WTI)
+    via the route+facet query — this pins the exact series and sorts newest-first, unlike the loose
+    /seriesid/ route which mixes delivery areas. Returns None on no key / no data."""
+    key = os.environ.get("EIA_API_KEY")
+    route = _EIA_ROUTE.get(series)
+    if not key or not route:
+        return None
+    try:
+        d = _get(f"https://api.eia.gov/v2/{route}/data/",
+                 params={"api_key": key, "frequency": "daily", "data[0]": "value",
+                         "facets[series][]": series, "sort[0][column]": "period",
+                         "sort[0][direction]": "desc", "length": 1}).json()
+        rows = d.get("response", {}).get("data", [])
+        if rows and rows[0].get("value") not in (None, ""):
+            return float(rows[0]["value"])
+    except Exception:
+        pass
+    return None
+
+
+def _eia_ratio(s1, s2):
+    a, b = _eia_series(s1), _eia_series(s2)
+    return round(a / b, 4) if (a and b) else None
+
+
+def _index_last(sym):
+    """Latest index level from a free source: stooq CSV first, Yahoo chart as fallback."""
+    try:
+        row = _get(f"https://stooq.com/q/l/?s={sym}&f=sl1&e=csv").text.strip().splitlines()[-1]
+        val = row.split(",")[-1]
+        if val not in ("N/D", ""):
+            return float(val)
+    except Exception:
+        pass
+    try:
+        j = _get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym.upper()}").json()
+        return float(j["chart"]["result"][0]["meta"]["regularMarketPrice"])
+    except Exception:
+        return None
+
+
+def _vix_term():
+    """VX1/VX2 proxy from the free VIX / VIX3M spot term structure (keyless, well-known). <1 = contango.
+    VIX/VIX3M spans 1m→3m — about twice the 1m→2m span of the real VX1/VX2 futures — and the term
+    structure is ~log-linear, so VX1/VX2 ≈ sqrt(VIX/VIX3M). Rescaling here keeps the book's VX1/VX2
+    thresholds (≤0.90 optimal … >1.00 STOP) honest instead of over-reading the steeper 3-month curve
+    (e.g. raw VIX/VIX3M 0.82 → 0.906, favorable-but-not-pegged, not a false max-conviction 100)."""
+    vix, vix3m = _index_last("^vix"), _index_last("^vix3m")
+    if not (vix and vix3m):
+        return None
+    return round((vix / vix3m) ** 0.5, 4)
+
+
+def fetch_ib_curves() -> dict:
+    """VIX / NG / CL front-second ratios from IB Gateway — the FALLBACK source (needs IB_ENABLED=1)."""
+    out = {}
+    try:
+        from datafeed import IBKRBackend
+        be = IBKRBackend()
+        if not be.available():
+            return out
+        for key, (root, exch) in _CURVE_ROOTS.items():
+            try:
+                c = be.futures_curve(root, exch)
+                if c.get("ratio") is not None:
+                    out[key] = c["ratio"]
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return out
+
+
+def fetch_curves(force: bool = False) -> dict:
+    """The three curve ratios — FREE sources first (EIA + Cboe VIX/VIX3M), IB Gateway as fallback for
+    anything missing. Cached once per run. {} if nothing reachable (engine falls back to its inputs)."""
+    global _CURVES, _CURVES_SRC
+    if _CURVES is not None and not force:
+        return _CURVES
+    c, src = {}, {}
+    free = {"ng1_ng2": _eia_ratio("NG.RNGC1.D", "NG.RNGC2.D"),
+            "cl1_cl2": _eia_ratio("PET.RCLC1.D", "PET.RCLC2.D"),
+            "vx1_vx2": _vix_term()}
+    for k, v in free.items():
+        if v is not None:
+            c[k], src[k] = v, "free"
+    for k in [x for x in CURVE_KEY_BY_CLASS.values() if x not in c]:   # IB fallback for the gaps
+        ibv = fetch_ib_curves().get(k)
+        if ibv is not None:
+            c[k], src[k] = ibv, "ib"
+    _CURVES, _CURVES_SRC = c, src
+    return c
+
+
+def _apply_live_curves(ticker: str, metrics: dict) -> dict:
+    """Override a vol/natgas/crude ticker's curve ratio with the live read when one is available."""
+    key = CURVE_KEY_BY_CLASS.get(instrument_class(ticker))
+    if key:
+        live = fetch_curves().get(key)
+        if live is not None:
+            return {**metrics, key: live, "_curve_source": _CURVES_SRC.get(key, "live")}
+    return metrics
+
+
 def compute_signal(ticker: str, metrics: dict) -> dict:
-    """Full decay signal for one instrument. `metrics` holds the raw inputs the class needs."""
+    """Full decay signal for one instrument. `metrics` holds the raw inputs the class needs.
+    If IB is enabled, the class's curve ratio (VX1/VX2, NG1/NG2, CL1/CL2) is overridden with the live
+    read; otherwise the passed-in value is used."""
+    metrics = _apply_live_curves(ticker, metrics)
     cls, scored, stand_aside, reasons = _score_all(ticker, metrics)
     base = sum(sc * wt for sc, wt in scored.values())
     conv_z = metrics.get("convexity_z", 0.0)
@@ -290,6 +437,7 @@ def compute_signal(ticker: str, metrics: dict) -> dict:
         "stand_aside": stand_aside, "stand_aside_reason": "; ".join(reasons) or None,
         "structure_hint": hint,
         "components": {k: {"score": round(sc, 1), "weight": wt} for k, (sc, wt) in scored.items()},
+        "curve_source": metrics.get("_curve_source", "input"),
         "as_of": _now_iso(),
     }
 
@@ -403,6 +551,12 @@ if __name__ == "__main__":
         "TQQQ": {"rv_iv": 1.2, "dist_above_200sma_pct": 30.0, "weekly_rsi": 72.0, "bb_pos": 0.9,
                  "pcr_z": -1.4, "convexity_z": 1.9, "iv_pct": 45.0},                                              # levered index
     }
+    live = fetch_curves()
+    if live:
+        print(f"[decay] LIVE curves {live}  sources={_CURVES_SRC}  (override the demo inputs)\n")
+    else:
+        print("[decay] no live curve source reachable — using demo inputs. Set EIA_API_KEY (free, "
+              "NG/CL) and/or IB_ENABLED=1 (fallback) for live curves.\n")
     sigs = [compute_signal(t, m) for t, m in demo.items()]
     daily_dashboard(sigs)
     print("\nSleeve proposals -> cio.py --sleeve levered_etf:")
