@@ -726,10 +726,12 @@ def resume(approval_id: str, reply: str) -> dict:
         ticket = {
             "order_id": approval_id,
             "status": "approved_awaiting_execution",   # a human/desk executes this, not us
+            "type": "trade",
             "ticker": d["ticker"],
             "side": d["approved_position"]["side"],
             "size_pct_nav": d["approved_position"]["size_pct_nav"],
             "stop_loss": d["stop_loss"],
+            "structure": record.get("structure_ticket"),   # legs + expiry, so the approved view is complete
             "approved_by": "telegram-human",
             "approved_at": now_iso(),
             "note": "NOT auto-executed — routed to the execution desk for manual placement.",

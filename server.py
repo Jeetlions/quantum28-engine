@@ -5,6 +5,7 @@ APPROVE / DISAPPROVE buttons call instead of the chat hook.
 
 Endpoints (JSON):
   GET  /api/pending                 -> list pending approvals (kind: trade | manage | basis)
+  GET  /api/orders                  -> approved order tickets (awaiting your manual execution), newest first
   GET  /api/performance             -> latest performance_report.json (equity curve + stats)
   POST /api/resume {approval_id, reply}  -> orchestrator.resume(approval_id, reply)
         reply = "approve" | "disapprove"; on approve the orchestrator writes the order ticket.
@@ -25,6 +26,7 @@ import orchestrator as O
 
 BASE = Path(__file__).resolve().parent
 PENDING = BASE / "pending_approvals"
+ORDERS = BASE / "orders"
 PERF = BASE / "benchmarks" / "performance_report.json"
 TOKEN = os.environ.get("QUANTUM_API_TOKEN")            # if set, required on every request
 # Railway sets $PORT and needs a public bind; the bearer token protects the endpoint.
@@ -108,6 +110,17 @@ class Handler(BaseHTTPRequestHandler):
                         "summary": r.get("basis_trade") or r.get("action") or dec.get("ticker"),
                     })
             return self._send(200, {"pending": items})
+        if self.path.startswith("/api/orders"):
+            # Approved order tickets (what you okayed) — newest first. These are 'awaiting_execution':
+            # the record of your approval, still placed by you at the broker. Never auto-executed.
+            orders = []
+            if ORDERS.exists():
+                for f in sorted(ORDERS.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+                    try:
+                        orders.append(json.loads(f.read_text()))
+                    except Exception:
+                        continue
+            return self._send(200, {"orders": orders[:100]})
         if self.path.startswith("/api/performance"):
             return self._send(200, json.loads(PERF.read_text()) if PERF.exists() else {})
         return self._send(404, {"error": "not found"})

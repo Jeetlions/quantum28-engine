@@ -132,6 +132,9 @@
           <div class="appr" data-id="SPX-0DTE-20260808"><div class="r1"><span class="s">SPX</span><span class="chip c-hold">0DTE · BWB</span><span class="k">midday</span></div><div class="meta">zero-cost broken-wing on gamma pin 5960 · fresh 6m</div><div class="btns"><button class="btn ok" data-a="Approve the SPX 0DTE broken-wing butterfly">APPROVE</button><button class="btn no" data-a="Disapprove the SPX 0DTE fly">DISAPPROVE</button></div></div>
           <div class="appr" data-id="NDX-0DTE-20260808"><div class="r1"><span class="s">NDX</span><span class="chip c-short">0DTE · backspread</span><span class="k">breakout</span></div><div class="meta">negative gamma below flip → put ratio backspread</div><div class="btns"><button class="btn ok" data-a="Approve the NDX 0DTE put backspread">APPROVE</button><button class="btn no" data-a="Disapprove the NDX 0DTE backspread">DISAPPROVE</button></div></div>
         </div></div>
+        <div class="card"><h3>Approved — Awaiting Execution <span class="tag" style="background:rgba(52,211,153,.18);color:#34d399;border-color:#34d399">● LIVE · your order tickets</span></h3><div class="body" id="ordersBody">
+          <div class="meta">Approved trades appear here as order tickets — you still place each one at your broker.</div>
+        </div></div>
         <div class="card"><h3>Basis Dislocations <span class="tag" style="color:#e6c07a">single-stock futures · SAMPLE</span></h3>
           <table><thead><tr><th>Name</th><th>Exp</th><th>Signal</th><th>Edge/yr</th></tr></thead><tbody>
             <tr><td class="sym">CRSH</td><td>30d</td><td class="c-long">cash&carry</td><td class="up">+42.5%</td></tr>
@@ -506,7 +509,7 @@
           done(card,'… sending '+reply,'#8a97b4');
           fetch(API_BASE+'/api/resume',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+API_TOKEN},body:JSON.stringify({approval_id:id,reply:reply})})
             .then(function(r){return r.json();})
-            .then(function(d){done(card,'✓ '+(d.status||reply)+' — '+id, d.status==='disapproved'?'#fbbf24':'#34d399');})
+            .then(function(d){done(card,'✓ '+(d.status||reply)+' — '+id, d.status==='disapproved'?'#fbbf24':'#34d399'); if(d.status==='approved'&&typeof loadOrders==='function')setTimeout(loadOrders,400);})
             .catch(function(){done(card,'✗ server unreachable','#f87171');});
         }else{
           if(typeof sendPrompt==='function')sendPrompt(msg);
@@ -556,7 +559,34 @@
       })
       .catch(function(e){var un=/unauthorized/.test(e.message||'');if(un){localStorage.removeItem('q28_token');API_TOKEN='';askToken(body,'⚠ Token rejected — paste it again:');}else{body.innerHTML='<div class="meta" style="color:#f87171">⚠ '+(e.message||'network error')+' — check API_BASE.</div>';}});
   }
-  if(API_BASE){ loadPending(); setInterval(loadPending,30000); }   // live: pull real approvals w/ legs
+  function fmtTime(t){return t?String(t).replace('T',' ').slice(0,16):'';}
+  function orderLine(o){
+    if(o.type==='basis'){
+      var L=(o.legs||[]).map(function(l){return (l.action||l.side||'')+' '+(l.instrument||l.leg||l.ticker||'')+(l.strike?(' '+l.strike):'');}).join(' · ');
+      return (L||'spot + future pair')+(o.net_edge_ann_pct!=null?(' · edge '+o.net_edge_ann_pct+'%/yr'):'');
+    }
+    if(o.type==='manage'){return (o.manage_action||'manage')+' '+(o.strategy||'')+(o.reason?(' · '+o.reason):'');}
+    var parts=[]; if(o.side)parts.push(o.side); if(o.size_pct_nav!=null)parts.push(o.size_pct_nav+'% NAV'); if(o.stop_loss!=null)parts.push('stop '+o.stop_loss);
+    var ls=legsLine(o.structure), head=parts.join(' · ');
+    return (ls?(ls+(head?(' · '+head):'')):head)||'trade';
+  }
+  function loadOrders(){
+    var body=document.getElementById('ordersBody'); if(!body||!API_BASE||!API_TOKEN)return;
+    fetch(API_BASE+'/api/orders',{headers:{'Authorization':'Bearer '+API_TOKEN}})
+      .then(function(r){if(r.status===401)throw new Error('unauthorized');return r.json();})
+      .then(function(d){
+        var items=(d&&d.orders)||[];
+        if(!items.length){body.innerHTML='<div class="meta">No approved trades yet — they appear here once you tap Approve.</div>';return;}
+        body.innerHTML=items.map(function(o){
+          return '<div class="appr"><div class="r1"><span class="s">'+esc(o.ticker||'?')+'</span>'
+            +'<span class="chip c-ok">'+esc(o.type||'trade')+' · approved</span>'
+            +'<span class="k">'+esc(fmtTime(o.approved_at))+'</span></div>'
+            +'<div class="meta">'+esc(orderLine(o))+'</div></div>';
+        }).join('');
+      })
+      .catch(function(e){body.innerHTML='<div class="meta" style="color:#f87171">⚠ '+(e.message||'network error')+'</div>';});
+  }
+  if(API_BASE){ loadPending(); loadOrders(); setInterval(function(){loadPending();loadOrders();},30000); }   // live: pending + approved tickets
   else { bindBtns(root); }                                          // demo: keep the static preview cards
 })();
 </script>
