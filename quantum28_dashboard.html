@@ -594,12 +594,12 @@
       .then(function(d){
         var c=(d&&d.equity_curve)||[]; if(!c.length)return;   // keep the sample curve until real trades close
         window.__eq=[100].concat(c.map(function(p){return p.equity;}));
-        var h=d.headline||{}, last=c[c.length-1].equity, tot=h.total_return_pct, n=(d.window&&d.window.graded_trades)||c.length;
-        setTxt('kpiEq',(+last).toFixed(2)); setTxt('kpiEqS',(tot>=0?'+':'')+tot+'% · '+n+' trade'+(n===1?'':'s'));
+        var h=d.headline||{}, last=c[c.length-1].equity, tot=h.total_return_pct, n=(d.window&&d.window.graded_trades)||0, op=h.open_positions||0;
+        setTxt('kpiEq',(+last).toFixed(2)); setTxt('kpiEqS',(tot>=0?'+':'')+tot+'% · '+op+' open / '+n+' closed');
         setTxt('kpiSor',h.sortino_net); setTxt('kpiSorS','Sharpe '+h.sharpe_net);
         setTxt('kpiDD','-'+Math.abs(h.max_drawdown_pct)+'%'); setTxt('kpiDDS','CVaR '+h.cvar_25_pct+'%');
         setTxt('kpiHit',h.hit_rate_pct+'%'); setTxt('kpiHitS','payoff '+(h.payoff_ratio==null?'—':h.payoff_ratio));
-        var tag=document.getElementById('eqTag'); if(tag){tag.textContent='● LIVE · forward test · '+n+' closed';tag.style.color='#34d399';}
+        var tag=document.getElementById('eqTag'); if(tag){tag.textContent='● LIVE · forward test · '+op+' open / '+n+' closed';tag.style.color='#34d399';}
         if(typeof drawEq==='function')drawEq();
       }).catch(function(){});
   }

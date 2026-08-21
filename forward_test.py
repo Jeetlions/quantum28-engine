@@ -147,6 +147,83 @@ def _append_outcome(rec: dict) -> None:
         f.write(json.dumps(rec) + "\n")
 
 
+def _weight(p: dict) -> float:
+    """Fraction of NAV the position risks (size_pct_nav/100); default 2% if unknown."""
+    s = p.get("size_pct_nav")
+    return float(s) / 100.0 if isinstance(s, (int, float)) else 0.02
+
+
+def _pos_net_ret(p: dict) -> float:
+    """Signed underlying return (%) net of the cost assumption: + if the direction was right.
+    Closed positions use the exit mark; open positions use the latest mark (live MTM)."""
+    entry = float(p.get("entry_px") or 0)
+    if not entry:
+        return 0.0
+    px = float((p.get("exit_px") if p.get("status") == "closed" else p.get("last_px")) or entry)
+    side = (p.get("side") or "").lower()
+    dirn = 1 if side == "long" else (-1 if side == "short" else 0)
+    return dirn * (px / entry - 1.0) * 100.0 - COST_BPS / 100.0
+
+
+def _nav_point(positions: list, tdy: date) -> dict:
+    """Today's book NAV: realized P&L (locked) + open positions marked live, each weighted by size."""
+    real = sum(_weight(p) * _pos_net_ret(p) for p in positions if p.get("status") == "closed")
+    unreal = sum(_weight(p) * _pos_net_ret(p) for p in positions if p.get("status") == "open")
+    total = real + unreal
+    return {"date": tdy.isoformat(), "equity": round(100.0 * (1 + total / 100.0), 4),
+            "total_return_pct": round(total, 4), "realized_pct": round(real, 4),
+            "unrealized_pct": round(unreal, 4),
+            "open": sum(1 for p in positions if p.get("status") == "open"),
+            "closed": sum(1 for p in positions if p.get("status") == "closed")}
+
+
+def write_mtm_report(book: dict) -> None:
+    """Overlay a live mark-to-market equity curve onto performance_report.json. Keeps the reporter's
+    realized attribution/ratios when present, but the CURVE and the return/drawdown headline reflect
+    open positions marked daily — so it moves the day you approve, not only when a trade closes."""
+    positions = list(book["positions"].values())
+    nav = book.get("nav_series", [])
+    if not positions or not nav:
+        return
+    pr = BENCH / "performance_report.json"
+    rep = {}
+    if pr.exists():
+        try:
+            rep = json.loads(pr.read_text())
+        except Exception:
+            rep = {}
+    curve, peak = [], 100.0
+    for pt in nav:
+        peak = max(peak, pt["equity"])
+        dd = round((peak - pt["equity"]) / peak * 100.0, 2) if peak else 0.0
+        curve.append({"date": pt["date"], "ticker": "book", "ret_pct": pt.get("total_return_pct", 0.0),
+                      "equity": pt["equity"], "cum_return_pct": round(pt["equity"] - 100.0, 2),
+                      "drawdown_pct": dd})
+    last = curve[-1]
+    head = rep.get("headline", {}) or {}
+    head.update({
+        "total_return_pct": round(last["equity"] - 100.0, 2),
+        "max_drawdown_pct": round(max((c["drawdown_pct"] for c in curve), default=0.0), 2),
+        "realized_pct": nav[-1].get("realized_pct", 0.0),
+        "unrealized_pct": nav[-1].get("unrealized_pct", 0.0),
+        "open_positions": nav[-1].get("open", 0),
+        "closed_positions": nav[-1].get("closed", 0),
+    })
+    for k, v in {"sortino_net": 0.0, "sharpe_net": 0.0, "hit_rate_pct": 0.0,
+                 "payoff_ratio": None, "cvar_25_pct": 0.0}.items():
+        head.setdefault(k, v)
+    rep["headline"] = head
+    rep["equity_curve"] = curve
+    win = rep.get("window", {}) or {}
+    win.update({"from": curve[0]["date"], "to": last["date"],
+                "graded_trades": nav[-1].get("closed", 0), "open_positions": nav[-1].get("open", 0)})
+    rep["window"] = win
+    rep["generated_at"] = now_iso()
+    rep["mode"] = "forward-test MTM — open positions marked daily; realized P&L locks on close"
+    BENCH.mkdir(parents=True, exist_ok=True)
+    pr.write_text(json.dumps(rep, indent=2))
+
+
 def main() -> int:
     book = load_book()
     positions = book["positions"]
@@ -212,6 +289,15 @@ def main() -> int:
                 written.add(did)
             closed += 1
 
+    # 3) Append today's book NAV (open positions marked live + realized locked), deduped per day.
+    if positions:
+        pt = _nav_point(list(positions.values()), tdy)
+        nav = book.setdefault("nav_series", [])
+        if nav and nav[-1]["date"] == pt["date"]:
+            nav[-1] = pt
+        else:
+            nav.append(pt)
+
     book["outcomes_written"] = sorted(written)
     save_book(book)
 
@@ -219,14 +305,18 @@ def main() -> int:
     print(f"[forward] opened {opened} · marked {marked} · closed {closed} · "
           f"open now {n_open} · total tracked {len(positions)} (src {feed.active()})")
 
-    # 3) Regenerate the human-facing report + equity curve from the realized outcomes.
+    # 4) Regenerate the realized report (attribution/ratios), then overlay the live MTM curve.
     try:
         import performance
         performance.main()
     except SystemExit:
         pass
     except Exception as e:
-        print(f"[forward] report regen skipped: {e}")
+        print(f"[forward] realized report skipped: {e}")
+    try:
+        write_mtm_report(book)
+    except Exception as e:
+        print(f"[forward] MTM overlay skipped: {e}")
     return 0
 
 
