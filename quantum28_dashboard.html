@@ -517,8 +517,16 @@
   }
   function legsLine(s){
     if(!s)return '';
-    var L=(s.legs||[]).map(function(l){return l.action+' '+(l.qty||1)+'x '+l.right+' '+l.strike;}).join(' · ');
+    var legs=s.legs||[];
+    var exps=legs.map(function(l){return l.expiry;}).filter(Boolean);
+    var uniq=exps.filter(function(v,i){return exps.indexOf(v)===i;});
+    var multi=uniq.length>1;   // calendars/diagonals span expiries -> tag each leg; else show one shared exp
+    var L=legs.map(function(l){
+      return l.action+' '+(l.qty||1)+'x '+l.right+' '+l.strike+((multi&&l.expiry)?(' @'+l.expiry):'');
+    }).join(' · ');
     var p=[]; if(L)p.push(L);
+    if(!multi&&uniq.length===1)p.push('exp '+uniq[0]);
+    else if(multi)p.push('exp '+uniq.join(' / '));
     if(s.net&&s.net.type)p.push('net '+s.net.type+' '+s.net.amount);
     if(s.max_loss!=null)p.push('max loss '+s.max_loss);
     if(s.breakevens)p.push('BE '+JSON.stringify(s.breakevens));
