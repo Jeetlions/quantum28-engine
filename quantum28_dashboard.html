@@ -106,16 +106,16 @@
   <!-- ============ COMMAND DECK ============ -->
   <section class="screen active" id="scr-deck">
     <div class="kpis">
-      <div class="kpi"><div class="l">Equity Index</div><div class="v up">125.10</div><div class="s up">+25.1% · new ATH ★</div></div>
-      <div class="kpi"><div class="l">Sortino net</div><div class="v">0.99</div><div class="s">Sharpe 0.56</div></div>
-      <div class="kpi"><div class="l">Max Drawdown</div><div class="v down">-5.58%</div><div class="s">CVaR 2.49%</div></div>
-      <div class="kpi"><div class="l">Hit Rate</div><div class="v up">87.5%</div><div class="s">payoff 0.54</div></div>
+      <div class="kpi"><div class="l">Equity Index</div><div class="v up" id="kpiEq">125.10</div><div class="s up" id="kpiEqS">+25.1% · new ATH ★</div></div>
+      <div class="kpi"><div class="l">Sortino net</div><div class="v" id="kpiSor">0.99</div><div class="s" id="kpiSorS">Sharpe 0.56</div></div>
+      <div class="kpi"><div class="l">Max Drawdown</div><div class="v down" id="kpiDD">-5.58%</div><div class="s" id="kpiDDS">CVaR 2.49%</div></div>
+      <div class="kpi"><div class="l">Hit Rate</div><div class="v up" id="kpiHit">87.5%</div><div class="s" id="kpiHitS">payoff 0.54</div></div>
       <div class="kpi"><div class="l">Gross / Net</div><div class="v">12.0/8.0</div><div class="s">% NAV · at cap</div></div>
       <div class="kpi"><div class="l">Capacity</div><div class="v neu">100%</div><div class="s">full · rotating</div></div>
     </div>
     <div class="grid">
       <div class="col">
-        <div class="card"><h3>Equity Curve <span class="tag">index=100 · net of cost</span></h3><div class="body"><canvas id="q28eq" height="190"></canvas></div></div>
+        <div class="card"><h3>Equity Curve <span class="tag" id="eqTag">index=100 · net of cost · SAMPLE</span></h3><div class="body"><canvas id="q28eq" height="190"></canvas></div></div>
         <div class="card"><h3>Open Positions <span class="tag">Position Manager review</span></h3>
           <table><thead><tr><th>Ticker</th><th>Structure</th><th>Side</th><th>P&L %max</th><th>DTE</th><th>Action</th></tr></thead><tbody>
             <tr><td class="sym">SPX</td><td>iron condor</td><td class="c-hold">neutral</td><td class="up">58%</td><td>12</td><td><span class="chip c-close">CLOSE · profit</span></td></tr>
@@ -291,7 +291,7 @@
 
   // ---- canvas: equity ----
   function drawEq(){var cv=document.getElementById('q28eq');if(!cv||!cv.clientWidth)return;var ctx=cv.getContext('2d');
-    var pts=[100,106.0,109.5,114.6,117.1,119.1,112.5,115.6,118.4,121.9,123.2,125.1];   // ends at a NEW ATH
+    var pts=(window.__eq&&window.__eq.length>1)?window.__eq:[100,106.0,109.5,114.6,117.1,119.1,112.5,115.6,118.4,121.9,123.2,125.1];   // live forward test, else sample
     var w=cv.width=cv.clientWidth*2,h=cv.height=190*2;ctx.clearRect(0,0,w,h);
     var pad=26*2,lo=Math.min.apply(0,pts),hi=Math.max.apply(0,pts),rng=(hi-lo)||1;
     var athV=hi,athI=pts.indexOf(hi);
@@ -304,7 +304,7 @@
     var ay=Y(athV),ax=X(athI);
     ctx.strokeStyle='rgba(34,211,238,.55)';ctx.setLineDash([5,5]);ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(pad,ay);ctx.lineTo(w-pad,ay);ctx.stroke();ctx.setLineDash([]);
     ctx.beginPath();ctx.arc(ax,ay,8,0,7);ctx.fillStyle='rgba(34,211,238,.25)';ctx.fill();ctx.beginPath();ctx.arc(ax,ay,4.5,0,7);ctx.fillStyle='#22d3ee';ctx.fill();
-    ctx.fillStyle='#22d3ee';ctx.font='bold 22px ui-monospace,monospace';ctx.textAlign='right';ctx.fillText('★ ATH '+athV.toFixed(1)+'  ·  +'+(athV-100).toFixed(1)+'%',ax-14,ay-6);}
+    ctx.fillStyle='#22d3ee';ctx.font='bold 22px ui-monospace,monospace';ctx.textAlign='right';var _d=athV-100;ctx.fillText('★ '+athV.toFixed(1)+'  ·  '+(_d>=0?'+':'')+_d.toFixed(1)+'%',ax-14,ay-6);}
 
   // ---- canvas: gamma profile ----
   function drawGamma(id,strikes,gex,maxA,marks){var gc=document.getElementById(id);if(!gc||!gc.clientWidth)return;var g=gc.getContext('2d');
@@ -586,7 +586,24 @@
       })
       .catch(function(e){body.innerHTML='<div class="meta" style="color:#f87171">⚠ '+(e.message||'network error')+'</div>';});
   }
-  if(API_BASE){ loadPending(); loadOrders(); setInterval(function(){loadPending();loadOrders();},30000); }   // live: pending + approved tickets
+  function setTxt(id,v){var e=document.getElementById(id); if(e!=null&&v!=null)e.textContent=v;}
+  function loadPerformance(){
+    if(!API_BASE||!API_TOKEN)return;
+    fetch(API_BASE+'/api/performance',{headers:{'Authorization':'Bearer '+API_TOKEN}})
+      .then(function(r){if(r.status===401)throw new Error('unauthorized');return r.json();})
+      .then(function(d){
+        var c=(d&&d.equity_curve)||[]; if(!c.length)return;   // keep the sample curve until real trades close
+        window.__eq=[100].concat(c.map(function(p){return p.equity;}));
+        var h=d.headline||{}, last=c[c.length-1].equity, tot=h.total_return_pct, n=(d.window&&d.window.graded_trades)||c.length;
+        setTxt('kpiEq',(+last).toFixed(2)); setTxt('kpiEqS',(tot>=0?'+':'')+tot+'% · '+n+' trade'+(n===1?'':'s'));
+        setTxt('kpiSor',h.sortino_net); setTxt('kpiSorS','Sharpe '+h.sharpe_net);
+        setTxt('kpiDD','-'+Math.abs(h.max_drawdown_pct)+'%'); setTxt('kpiDDS','CVaR '+h.cvar_25_pct+'%');
+        setTxt('kpiHit',h.hit_rate_pct+'%'); setTxt('kpiHitS','payoff '+(h.payoff_ratio==null?'—':h.payoff_ratio));
+        var tag=document.getElementById('eqTag'); if(tag){tag.textContent='● LIVE · forward test · '+n+' closed';tag.style.color='#34d399';}
+        if(typeof drawEq==='function')drawEq();
+      }).catch(function(){});
+  }
+  if(API_BASE){ loadPending(); loadOrders(); loadPerformance(); setInterval(function(){loadPending();loadOrders();loadPerformance();},30000); }   // live: pending + approved tickets + equity curve
   else { bindBtns(root); }                                          // demo: keep the static preview cards
 })();
 </script>

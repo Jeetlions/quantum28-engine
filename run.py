@@ -73,6 +73,7 @@ def due(dt):
     if biz and h in (10, 14) and m == 0:     jobs.append(["basis.py"])              # basis (monitor-only)
     if biz and h == 15 and m == 45:          jobs.append(["scan_watchlist.py", "--bucket", "monitor"])
     if biz and h == 16 and m == 30:          jobs.append(["performance.py"])
+    if biz and h == 16 and m == 50:          jobs.append(["forward_test.py"])           # mark approved trades -> equity curve
     if biz and h == 17 and m == 0:           jobs.append(["scan_watchlist.py", "--bucket", "equities"])  # daily equity vote
     if wd == 4 and h == 18 and m == 0:       jobs.append(["benchmarks/benchmark.py"])   # weekly re-weight
     if wd == 4 and h == 18 and m == 30:      jobs.append(["calibration.py"])            # weekly re-calibrate
