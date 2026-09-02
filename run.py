@@ -57,6 +57,12 @@ def now_et():
     return datetime.now(ET) if ET else datetime.utcnow()
 
 
+def paused() -> bool:
+    """Global kill-switch: set PAUSED=1 (Railway variable) to halt all scheduled jobs without
+    tearing down the service — the bridge/dashboard stay up. Delete the variable to resume."""
+    return os.environ.get("PAUSED", "0").strip().lower() not in ("0", "", "false", "no")
+
+
 def due(dt):
     """Return the list of commands due at this ET minute (mirrors automations.yaml)."""
     wd, h, m = dt.weekday(), dt.hour, dt.minute        # wd 0=Mon..4=Fri
@@ -92,12 +98,18 @@ def main():
     mount_state()
     threading.Thread(target=start_bridge, daemon=True).start()
     print("[nexus] scheduler up (US/Eastern). OBSERVE/PAPER — every trade waits for your tap.")
+    if paused():
+        print("[nexus] PAUSED is set — jobs will be skipped until the PAUSED variable is removed.")
     last = None
     while True:
         dt = now_et(); key = (dt.hour, dt.minute)
         if key != last:
-            for cmd in due(dt):
-                run_job(cmd)
+            jobs = due(dt)
+            if jobs and paused():
+                print(f"[nexus] PAUSED — skipping {len(jobs)} job(s) at {dt:%Y-%m-%d %H:%M ET}")
+            else:
+                for cmd in jobs:
+                    run_job(cmd)
             last = key
         time.sleep(15)
 
