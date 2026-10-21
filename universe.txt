@@ -1,0 +1,68 @@
+# Screener universe — S&P 500 ∪ Nasdaq 100 (one ticker per line; '#' comments; duplicates OK).
+#
+# This is a STARTER set of the most liquid large caps so the screener runs out of the box.
+# Replace/expand it with the FULL current constituents — the lists change as names are added
+# and dropped, so refresh it periodically (e.g. each quarter after index rebalances).
+#   S&P 500 constituents:   en.wikipedia.org/wiki/List_of_S%26P_500_companies
+#   Nasdaq-100 constituents: en.wikipedia.org/wiki/Nasdaq-100
+# The screener de-dupes the overlap automatically, so you can paste both lists in full.
+
+AAPL
+MSFT
+NVDA
+AMZN
+GOOGL
+GOOG
+META
+AVGO
+TSLA
+BRK.B
+LLY
+JPM
+V
+XOM
+UNH
+MA
+COST
+HD
+PG
+JNJ
+NFLX
+BAC
+ABBV
+CRM
+ORCL
+MRK
+CVX
+WMT
+AMD
+PEP
+KO
+ADBE
+QCOM
+TMO
+CSCO
+LIN
+ACN
+MCD
+INTU
+ABT
+TXN
+DHR
+AMGN
+PM
+INTC
+CAT
+GE
+VZ
+ISRG
+CMCSA
+MU
+AMAT
+NOW
+BKNG
+HON
+GS
+PLTR
+UBER
+LRCX
